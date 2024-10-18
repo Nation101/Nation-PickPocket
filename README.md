@@ -6,7 +6,8 @@ Adds pickpocketing to your QBX server. Players can rob NPCs, with configurable m
 - NPC pickpocketing via ox_target
 - Configurable minigames (uses sp-minigame)
 - Custom loot tables
-- Police alerts (supports QBX, PS-Dispatch, or custom)
+- Police alerts (supports PS-Dispatch, or custom dispatch systems.)
+- Ability to make peds fight back!
 
 ## Requirements
 - QBX Core
