@@ -25,7 +25,6 @@ local function IsEntityValid(entity)
     return DoesEntityExist(entity) and not IsPedAPlayer(entity)
 end
 
--- Callback to handle pickpocket attempt
 lib.callback.register('pickpocket:attemptPickpocket', function(source, targetNetId)
     local src = source
     local targetPed = NetworkGetEntityFromNetworkId(targetNetId)
@@ -34,22 +33,17 @@ lib.callback.register('pickpocket:attemptPickpocket', function(source, targetNet
         return false, 'Invalid target'
     end
 
-    -- Check if the NPC has already been pickpocketed
     if pickpocketedNPCs[targetNetId] then
         return false, 'This person has already been pickpocketed!'
     end
 
-    -- Check if the player is on cooldown
     local currentTime = GetGameTimer()
     if playerCooldowns[src] and currentTime - playerCooldowns[src] < Config.PickpocketCooldown then
         local remainingTime = math.ceil((Config.PickpocketCooldown - (currentTime - playerCooldowns[src])) / 1000)
         return false, string.format('You must wait %d seconds before pickpocketing again!', remainingTime)
     end
 
-    -- Mark the NPC as pickpocketed
     pickpocketedNPCs[targetNetId] = true
-
-    -- Set the player's cooldown
     playerCooldowns[src] = currentTime
     
     return true

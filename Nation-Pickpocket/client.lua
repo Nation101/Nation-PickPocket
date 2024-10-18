@@ -12,27 +12,20 @@ end)
 
 local function AlertPolice(targetPed)
     if math.random(100) > Config.PoliceDispatch.chanceToAlert then
-        return -- Don't alert if random chance fails
+        return
     end
 
     local playerPed = PlayerPedId()
     local playerCoords = GetEntityCoords(playerPed)
     local targetCoords = GetEntityCoords(targetPed)
 
-    if Config.PoliceDispatch.system == 'QBX' then
-        -- Using QBX Police system
-        TriggerEvent('police:client:policeAlert', 'Pickpocketing in progress', playerCoords, true)
-    elseif Config.PoliceDispatch.system == 'PS' then
+    if Config.PoliceDispatch.system == 'PS' then
         exports['ps-dispatch']:SuspiciousActivity()
     elseif Config.PoliceDispatch.system == 'Custom' then
         CustomPoliceDispatch(playerCoords, targetCoords)
-    else
-        print("Invalid or unconfigured police dispatch system")
     end
 end
 
-
--- Table of minigame functions
 local minigameFunctions = {
     MemoryGame = function(params)
         return exports['sp-minigame']:MemoryGame(params.keysNeeded, params.rounds, params.time)
@@ -64,7 +57,6 @@ local minigameFunctions = {
     end
 }
 
--- Function to start pickpocket minigame
 local function StartPickpocketMinigame()
     local minigameType = Config.Minigame.type
     local params = Config.Minigame.params[minigameType]
@@ -73,12 +65,10 @@ local function StartPickpocketMinigame()
     if minigameFunction then
         return minigameFunction(params)
     else
-        print("Invalid minigame type selected:", minigameType)
         return false
     end
 end
 
--- Function to show loading bar
 local function ShowLoadingBar()
     return lib.progressBar({
         duration = Config.ProgressBar.duration,
@@ -93,12 +83,59 @@ local function ShowLoadingBar()
     })
 end
 
--- Function to check if an entity is valid
 local function IsEntityValid(entity)
     return DoesEntityExist(entity) and not IsPedAPlayer(entity)
 end
 
--- Register ox_target interaction
+local function FreezeNPC(npc)
+    NetworkRequestControlOfEntity(npc)
+    SetEntityInvincible(npc, true)
+    SetPedCanRagdoll(npc, false)
+    ClearPedTasksImmediately(npc)
+    SetBlockingOfNonTemporaryEvents(npc, true)
+    TaskStandStill(npc, -1)
+end
+
+local function UnfreezeNPC(npc)
+    NetworkRequestControlOfEntity(npc)
+    SetEntityInvincible(npc, false)
+    SetPedCanRagdoll(npc, true)
+    SetBlockingOfNonTemporaryEvents(npc, false)
+    ClearPedTasksImmediately(npc)
+end
+
+local function NPCHandsUp(npc)
+    TaskHandsUp(npc, -1, PlayerPedId(), -1, false)
+end
+
+local function NPCAttackPlayer(npc)
+    if not DoesEntityExist(npc) then
+        return
+    end
+    UnfreezeNPC(npc)
+    ClearPedTasksImmediately(npc)
+    RemoveAllPedWeapons(npc, true)
+    SetPedRelationshipGroupHash(npc, GetHashKey('HATES_PLAYER'))
+    SetPedCombatAttributes(npc, 46, true)  -- BF_CanFightArmedPedsWhenNotArmed
+    SetPedCombatAttributes(npc, 5, true)   -- BF_AlwaysFight
+    SetPedCombatAttributes(npc, 0, false)  -- BF_CanUseCover
+    SetPedCombatAttributes(npc, 50, true)   -- Bum Rush the player
+
+    local weaponHash = GetHashKey(Config.npcWeapon)
+    GiveWeaponToPed(npc, weaponHash, 1000, false, true)
+    SetCurrentPedWeapon(npc, weaponHash, true)
+    SetPedCombatMovement(npc, 3)  -- Aggressive
+    SetPedCombatRange(npc, 3)     -- Far
+    TaskCombatPed(npc, PlayerPedId(), 0, 16)
+    SetPedFleeAttributes(npc, 0, false)
+    SetPedCombatAttributes(npc, 17, false)  -- BF_DisableFleeFromCombat
+end
+
+local function NPCFlee(npc)
+    UnfreezeNPC(npc)
+    TaskSmartFleePed(npc, PlayerPedId(), 100.0, -1, false, false)
+end
+
 exports.ox_target:addGlobalPed({
     {
         name = 'pickpocket_ped',
@@ -117,23 +154,32 @@ exports.ox_target:addGlobalPed({
             local canPickpocket, message = lib.callback.await('pickpocket:attemptPickpocket', false, NetworkGetNetworkIdFromEntity(targetPed))
             
             if canPickpocket then
-                -- Alert police here, after a successful pickpocket attempt
-
+                FreezeNPC(targetPed)
                 
                 if StartPickpocketMinigame() then
-                    if IsEntityValid(targetPed) and ShowLoadingBar() then
-                        local success, result = lib.callback.await('pickpocket:success', false)
-                        if success then
-                            lib.notify({description = result, type = 'success'})
-                            AlertPolice(targetPed)
+                    if IsEntityValid(targetPed) then
+                        NPCHandsUp(targetPed)
+                        if ShowLoadingBar() then
+                            local success, result = lib.callback.await('pickpocket:success', false)
+                            if success then
+                                lib.notify({description = result, type = 'success'})
+                                AlertPolice(targetPed)
+                                Wait(2000)
+                                NPCFlee(targetPed)
+                            else
+                                lib.notify({description = result or 'Pickpocket failed!', type = 'error'})
+                                NPCAttackPlayer(targetPed)
+                            end
                         else
-                            lib.notify({description = result or 'Pickpocket failed!', type = 'error'})
+                            lib.notify({description = 'Pickpocket cancelled!', type = 'error'})
+                            NPCAttackPlayer(targetPed)
                         end
                     else
-                        lib.notify({description = 'Pickpocket cancelled or target no longer valid!', type = 'error'})
+                        lib.notify({description = 'Target no longer valid!', type = 'error'})
                     end
                 else
                     lib.notify({description = 'Pickpocket failed!', type = 'error'})
+                    NPCAttackPlayer(targetPed)
                 end
             else
                 lib.notify({description = message, type = 'error'})

@@ -2,7 +2,7 @@ Config = {}
 
 Config.PoliceDispatch = {
     system = 'PS', -- Options: 'QBX', 'PS (PS-Dispatch)', 'Custom'
-    chanceToAlert = 100 -- Percentage chance of alerting police (0-100)
+    chanceToAlert = 100 --0-100
 }
 
 -- Loot tables
@@ -24,16 +24,18 @@ Config.LootTables = {
     }
 }
 
--- Loot probabilities (customize these as needed)
+-- These should total 100
 Config.LootChances = {
-    nothing = 20,  -- 20% chance of getting nothing
-    common = 60,   -- 60% chance of common loot
-    rare = 15,     -- 15% chance of rare loot
-    ultraRare = 5  -- 5% chance of ultra-rare loot
+    nothing = 20,
+    common = 60,
+    rare = 15,
+    ultraRare = 5
 }
 
+Config.npcWeapon = "weapon_switchblade" --What will the NPC use when pickpocketing fails?
+
 Config.Minigame = {
-    type = 'SkillBar', -- Change this to select different minigames
+    type = 'SkillBar',
     params = {
         MemoryGame = {keysNeeded = 3, rounds = 2, time = 10000},
         NumberUp = {keys = 28, rounds = 2, tries = 2, time = 40000, shuffleTime = 20000},
@@ -47,7 +49,6 @@ Config.Minigame = {
     }
 }
 
--- Progress bar configuration
 Config.ProgressBar = {
     duration = 5000,
     label = 'Pickpocketing...',
