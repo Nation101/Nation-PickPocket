@@ -32,7 +32,7 @@ Config.LootChances = {
     ultraRare = 5
 }
 
-Config.npcWeapon = "weapon_switchblade" --What will the NPC use when pickpocketing fails?
+Config.npcWeapon = "weapon_unarmed" --What will the NPC use when pickpocketing fails?
 
 Config.Minigame = {
     type = 'SkillBar',
