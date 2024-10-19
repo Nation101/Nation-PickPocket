@@ -1,31 +1,5 @@
 local Config = require 'config'
 
-local function IsPlayerArmed()
-    local ped = PlayerPedId()
-    return IsPedArmed(ped, 7)
-end
-
-lib.callback.register('pickpocket:getStreetName', function(coords)
-    local streetHash = GetStreetNameAtCoord(coords.x, coords.y, coords.z)
-    return GetStreetNameFromHashKey(streetHash)
-end)
-
-local function AlertPolice(targetPed)
-    if math.random(100) > Config.PoliceDispatch.chanceToAlert then
-        return
-    end
-
-    local playerPed = PlayerPedId()
-    local playerCoords = GetEntityCoords(playerPed)
-    local targetCoords = GetEntityCoords(targetPed)
-
-    if Config.PoliceDispatch.system == 'PS' then
-        exports['ps-dispatch']:SuspiciousActivity()
-    elseif Config.PoliceDispatch.system == 'Custom' then
-        CustomPoliceDispatch(playerCoords, targetCoords)
-    end
-end
-
 local minigameFunctions = {
     MemoryGame = function(params)
         return exports['sp-minigame']:MemoryGame(params.keysNeeded, params.rounds, params.time)
@@ -69,25 +43,57 @@ local function StartPickpocketMinigame()
     end
 end
 
-local function ShowLoadingBar()
-    return lib.progressBar({
-        duration = Config.ProgressBar.duration,
-        label = Config.ProgressBar.label,
-        useWhileDead = Config.ProgressBar.useWhileDead,
-        canCancel = Config.ProgressBar.canCancel,
-        disable = Config.ProgressBar.disable,
-        anim = {
-            dict = Config.ProgressBar.anim.dict,
-            clip = Config.ProgressBar.anim.clip
-        },
-    })
+local function IsPlayerArmed()
+    local ped = PlayerPedId()
+    return IsPedArmed(ped, 7)
 end
 
 local function IsEntityValid(entity)
-    return DoesEntityExist(entity) and not IsPedAPlayer(entity)
+    return entity ~= nil and DoesEntityExist(entity) and not IsPedAPlayer(entity)
+end
+
+local function AlertPolice(targetPed)
+    if math.random(100) > Config.PoliceDispatch.chanceToAlert then
+        return
+    end
+
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+    local targetCoords = GetEntityCoords(targetPed)
+
+    if Config.PoliceDispatch.system == 'PS' then
+        exports['ps-dispatch']:SuspiciousActivity()
+    elseif Config.PoliceDispatch.system == 'Custom' then
+        CustomPoliceDispatch(playerCoords, targetCoords)
+    end
+end
+local function PlaySearchAnimation()
+    local playerPed = PlayerPedId()
+    local dict = "amb@prop_human_bum_bin@base"
+    local anim = "base"
+
+    RequestAnimDict(dict)
+    while not HasAnimDictLoaded(dict) do
+        Wait(10)
+    end
+
+    TaskPlayAnim(playerPed, dict, anim, 8.0, -8.0, -1, 1, 0, false, false, false)
+end
+
+local function StopSearchAnimation()
+    local playerPed = PlayerPedId()
+    ClearPedTasks(playerPed)
+end
+
+local function IsPedFacingAway(ped, playerPed)
+    local pedHeading = GetEntityHeading(ped)
+    local playerHeading = GetEntityHeading(playerPed)
+    local headingDiff = math.abs(pedHeading - playerHeading)
+    return headingDiff <= 90 or headingDiff >= 270
 end
 
 local function FreezeNPC(npc)
+    if not IsEntityValid(npc) then return end
     NetworkRequestControlOfEntity(npc)
     SetEntityInvincible(npc, true)
     SetPedCanRagdoll(npc, false)
@@ -97,6 +103,7 @@ local function FreezeNPC(npc)
 end
 
 local function UnfreezeNPC(npc)
+    if not IsEntityValid(npc) then return end
     NetworkRequestControlOfEntity(npc)
     SetEntityInvincible(npc, false)
     SetPedCanRagdoll(npc, true)
@@ -104,14 +111,8 @@ local function UnfreezeNPC(npc)
     ClearPedTasksImmediately(npc)
 end
 
-local function NPCHandsUp(npc)
-    TaskHandsUp(npc, -1, PlayerPedId(), -1, false)
-end
-
 local function NPCAttackPlayer(npc)
-    if not DoesEntityExist(npc) then
-        return
-    end
+    if not IsEntityValid(npc) then return end
     UnfreezeNPC(npc)
     ClearPedTasksImmediately(npc)
     RemoveAllPedWeapons(npc, true)
@@ -125,25 +126,36 @@ local function NPCAttackPlayer(npc)
     GiveWeaponToPed(npc, weaponHash, 1000, false, true)
     SetCurrentPedWeapon(npc, weaponHash, true)
     SetPedCombatMovement(npc, 3)  -- Aggressive
-    SetPedCombatRange(npc, 3)     -- Far
+    SetPedCombatRange(npc, 2)     -- Medium range
     TaskCombatPed(npc, PlayerPedId(), 0, 16)
     SetPedFleeAttributes(npc, 0, false)
     SetPedCombatAttributes(npc, 17, false)  -- BF_DisableFleeFromCombat
 end
 
-local function NPCFlee(npc)
+--[[local function NPCFlee(npc)
+    if not IsEntityValid(npc) then return end
     UnfreezeNPC(npc)
     TaskSmartFleePed(npc, PlayerPedId(), 100.0, -1, false, false)
+end]]
+
+local function ShouldShowPickpocketOption(entity)
+    local playerPed = PlayerPedId()
+    return IsPlayerArmed() and IsEntityValid(entity) and IsPedFacingAway(entity, playerPed)
 end
+
+lib.callback.register('pickpocket:getStreetName', function(coords)
+    local streetHash = GetStreetNameAtCoord(coords.x, coords.y, coords.z)
+    return GetStreetNameFromHashKey(streetHash)
+end)
+
 
 exports.ox_target:addGlobalPed({
     {
         name = 'pickpocket_ped',
         icon = 'fas fa-hand-paper',
         label = 'Pickpocket',
-        canInteract = function(entity, distance, coords, name)
-            return IsPlayerArmed() and IsEntityValid(entity)
-        end,
+        distance = 1.0,
+        canInteract = ShouldShowPickpocketOption,
         onSelect = function(data)
             if not data or not data.entity or not IsEntityValid(data.entity) then
                 lib.notify({description = 'Invalid target!', type = 'error'})
@@ -155,29 +167,41 @@ exports.ox_target:addGlobalPed({
             
             if canPickpocket then
                 FreezeNPC(targetPed)
-                
+                PlaySearchAnimation()  -- Start the search animation before the minigame
                 if StartPickpocketMinigame() then
                     if IsEntityValid(targetPed) then
-                        NPCHandsUp(targetPed)
-                        if ShowLoadingBar() then
+                        if lib.progressBar({
+                            duration = 5000,
+                            label = 'Searching...',
+                            useWhileDead = false,
+                            canCancel = true,
+                            disable = {
+                                car = true,
+                                move = true,
+                                combat = true,
+                            },
+                        }) then
+                            StopSearchAnimation()
                             local success, result = lib.callback.await('pickpocket:success', false)
                             if success then
                                 lib.notify({description = result, type = 'success'})
                                 AlertPolice(targetPed)
-                                Wait(2000)
-                                NPCFlee(targetPed)
+                                --NPCFlee(targetPed)
                             else
                                 lib.notify({description = result or 'Pickpocket failed!', type = 'error'})
                                 NPCAttackPlayer(targetPed)
                             end
                         else
+                            StopSearchAnimation()
                             lib.notify({description = 'Pickpocket cancelled!', type = 'error'})
                             NPCAttackPlayer(targetPed)
                         end
                     else
+                        StopSearchAnimation()
                         lib.notify({description = 'Target no longer valid!', type = 'error'})
                     end
                 else
+                    StopSearchAnimation()
                     lib.notify({description = 'Pickpocket failed!', type = 'error'})
                     NPCAttackPlayer(targetPed)
                 end

@@ -56,7 +56,7 @@ Config.ProgressBar = {
     canCancel = true,
     disable = {
         car = true,
-        move = true,
+        move = false,
         combat = true,
     },
     anim = {
